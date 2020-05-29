@@ -30,12 +30,6 @@ def test_modules():
         "[info] db.insert_app_details(): {}".format(db.insert_app_details('49520', steamapi.get_app_details('49520'))))
 
 
-with open('config.json') as f:
-    config = json.load(f)
-
-print("[info] your config: {}".format(config))
-
-
 def signal_handler(sig, frame):
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     print('[info] waiting for tasks to exit')
@@ -45,28 +39,43 @@ def signal_handler(sig, frame):
     task.wait_finish()
 
 
-steamapi.init(config['api_key'])
-db.init()
-task.init(20)
-program_exit = False
-
-# test_modules()
-signal.signal(signal.SIGINT, signal_handler)
-
-print('[info] load_finished_tasks_from_db()')
-task.load_finished_tasks_from_db()
-task.schedule_user_as_unfinished_tasks('76561199022440128')
-task.print_current_info()
-print('[info] schedule_all_unfinished_tasks() start')
-task.schedule_all_unfinished_tasks()
-print('[info] schedule_all_unfinished_tasks() end')
-
-
 def print_info_interval():
     while True:
         time.sleep(5)
         task.print_current_info()
 
+
+# test_modules()
+
+# load config
+config = json.load(open('config.json'))
+print("[info] your config: {}".format(config))
+program_exit = False
+run_mode = task.RunMode.MODE_SPREAD_FRIEND
+if config['run_mode'] == 0:
+    run_mode = task.RunMode.MODE_SPREAD_FRIEND
+elif config['run_mode'] == 1:
+    run_mode = task.RunMode.MODE_FILLIN_USERINFO
+elif config['run_mode'] == 2:
+    run_mode = task.RunMode.MODE_FILLIN_GAMEINFO
+
+# init modules
+steamapi.init(config['api_key'])
+db.init()
+task.init(config['thread_pool_size'], run_mode)
+
+# setup signal handler
+signal.signal(signal.SIGINT, signal_handler)
+
+print('[info] load_finished_tasks_from_db()')
+task.load_finished_tasks_from_db()
+task.load_unfinished_tasks_fromdb()
+if run_mode == task.RunMode.MODE_SPREAD_FRIEND:
+    task.schedule_user_as_unfinished_tasks(config['start_steamid'])
+task.print_current_info()
+print('[info] schedule_all_unfinished_tasks() start')
+task.schedule_all_unfinished_tasks()
+print('[info] schedule_all_unfinished_tasks() end')
 
 info_thread = threading.Thread(target=print_info_interval)
 info_thread.start()

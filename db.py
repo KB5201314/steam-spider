@@ -33,6 +33,14 @@ def insert_app_details(appid, data):
     steamdb['app_details'].replace_one({'_id': appid}, data, upsert=True)
 
 
+def count_all_friend_list():
+    return steamdb['friend_list'].count()
+
+
+def find_all_steamid():
+    return steamdb['friend_list'].find().distinct('_id')
+
+
 def find_all_friend_list():
     return steamdb['friend_list'].find()
 

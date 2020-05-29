@@ -42,5 +42,6 @@ def get_recently_played_games(steamid):
 def get_app_details(appid):
     url = 'https://store.steampowered.com/api/appdetails?appids={}&l=english'.format(appid)
     response = requests.get(url)
+    # print('content', response.content)
     resp = response.json()
     return resp[list(resp.keys())[0]]

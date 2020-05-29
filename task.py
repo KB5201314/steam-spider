@@ -17,6 +17,12 @@ class TaskType(Enum):
     TASK_GET_APP_DETAILS = auto()
 
 
+class RunMode(Enum):
+    MODE_SPREAD_FRIEND = auto()
+    MODE_FILLIN_USERINFO = auto()
+    MODE_FILLIN_GAMEINFO = auto()
+
+
 class Task:
     def __init__(self, type: TaskType, paramter: dict):
         self.type = type
@@ -37,29 +43,39 @@ KEY_FINISHED_TASKS = "steam-user-net-finished-tasks"
 program_exit = False
 
 
-def init(pool_size):
+def init(pool_size, mode: RunMode):
     global executor
     executor = ThreadPoolExecutor(pool_size)
     global redis_client
     redis_client = redis.Redis()
+    global run_mode
+    run_mode = mode
 
 
 last_count_finished = 0
+last_count_user = 0
 last_count_finished_time = 0
 
 
 def print_current_info():
     global last_count_finished
+    global last_count_user
     global last_count_finished_time
-    print(('-' * 20) + ' tasks info ' + ('-' * 20))
-    count_finished = redis_client.scard(KEY_FINISHED_TASKS)
     count_finished_time = int(time.time())
+    count_finished = redis_client.scard(KEY_FINISHED_TASKS)
+    count_user = db.count_all_friend_list()
+
+    print(('-' * 20) + ' tasks info ' + ('-' * 20))
+    print("[info] user count: {} speed: {}/s".format(count_user, (count_user - last_count_user) / (
+            count_finished_time - last_count_finished_time)))
     print("[info] finished tasks: {} speed: {}/s".format(count_finished, (count_finished - last_count_finished) / (
             count_finished_time - last_count_finished_time)))
+    last_count_user = count_user
     last_count_finished = count_finished
     last_count_finished_time = count_finished_time
     print("[info] unfinished tasks: {}".format(redis_client.scard(KEY_UNFINISHED_TASKS)))
-    print('-' * 50)
+
+    print('-' * 55)
 
 
 def schedule_user_as_unfinished_tasks(steamid):
@@ -69,27 +85,51 @@ def schedule_user_as_unfinished_tasks(steamid):
 def schedule_all_unfinished_tasks():
     for task in redis_client.smembers(KEY_UNFINISHED_TASKS):
         task = pickle.loads(task)
-        executor.submit(runner, task)
+        if not program_exit:
+            executor.submit(runner, task)
 
 
 def load_finished_tasks_from_db():
     redis_client.delete(KEY_FINISHED_TASKS)
-    redis_client.sadd(KEY_FINISHED_TASKS, *set(
-        [pickle.dumps(Task(TaskType.TASK_GET_FRIEND_LIST, {'steamid': record['_id']})) for record in
-         db.find_all_friend_list()]))
-    redis_client.sadd(KEY_FINISHED_TASKS, *set(
-        [pickle.dumps(Task(TaskType.TASK_GET_PLAYER_SUMMARIES, {'steamid': record['_id']})) for record in
-         db.find_all_player_summaries()]))
-    redis_client.sadd(KEY_FINISHED_TASKS, *set(
-        [pickle.dumps(Task(TaskType.TASK_GET_OWNED_GAMES, {'steamid': record['_id']})) for record in
-         db.find_all_owned_games()]))
-    redis_client.sadd(KEY_FINISHED_TASKS,
-                      *set([pickle.dumps(Task(TaskType.TASK_GET_RECENTLY_PLAYED_GAMES, {'steamid': record['_id']})) for
-                            record in
-                            db.find_all_recently_played_games()]))
-    redis_client.sadd(KEY_FINISHED_TASKS, *set(
-        [pickle.dumps(Task(TaskType.TASK_GET_APP_DETAILS, {'appid': record['_id']})) for record in
-         db.find_all_app_details()]))
+    tasks = set()
+    tasks.update([pickle.dumps(Task(TaskType.TASK_GET_FRIEND_LIST, {'steamid': record['_id']})) for record in
+                  db.find_all_friend_list()])
+    tasks.update([pickle.dumps(Task(TaskType.TASK_GET_PLAYER_SUMMARIES, {'steamid': record['_id']})) for record in
+                  db.find_all_player_summaries()])
+    tasks.update([pickle.dumps(Task(TaskType.TASK_GET_OWNED_GAMES, {'steamid': record['_id']})) for record in
+                  db.find_all_owned_games()])
+    tasks.update([pickle.dumps(Task(TaskType.TASK_GET_RECENTLY_PLAYED_GAMES, {'steamid': record['_id']})) for record in
+                  db.find_all_recently_played_games()])
+    tasks.update([pickle.dumps(Task(TaskType.TASK_GET_APP_DETAILS, {'appid': record['_id']})) for record in
+                  db.find_all_app_details()])
+    if len(tasks) > 0:
+        redis_client.sadd(KEY_FINISHED_TASKS, *tasks)
+
+
+def load_unfinished_tasks_fromdb():
+    redis_client.delete(KEY_UNFINISHED_TASKS)
+    tasks = set()
+    if run_mode == RunMode.MODE_SPREAD_FRIEND:
+        friend_lists = db.find_all_friend_list()
+        for friend_list in friend_lists:
+            tasks.update(
+                [pickle.dumps(Task(TaskType.TASK_GET_FRIEND_LIST, {'steamid': friend['steamid']})) for friend in
+                 friend_list['friends']])
+    elif run_mode == RunMode.MODE_FILLIN_USERINFO:
+        steam_ids = set(db.find_all_steamid())
+        tasks.update(
+            [pickle.dumps(Task(TaskType.TASK_GET_PLAYER_SUMMARIES, {'steamid': steamid})) for steamid in steam_ids])
+        tasks.update([pickle.dumps(Task(TaskType.TASK_GET_OWNED_GAMES, {'steamid': steamid})) for steamid in steam_ids])
+        tasks.update([pickle.dumps(Task(TaskType.TASK_GET_RECENTLY_PLAYED_GAMES, {'steamid': steamid})) for steamid in
+                      steam_ids])
+    elif run_mode == RunMode.MODE_FILLIN_GAMEINFO:
+        all_owned_games = db.find_all_owned_games()
+        for owned_games in all_owned_games:
+            if 'games' in owned_games:
+                tasks.update([pickle.dumps(Task(TaskType.TASK_GET_APP_DETAILS, {'appid': game['appid']})) for game in owned_games['games']])
+
+    redis_client.sadd(KEY_UNFINISHED_TASKS, *tasks)
+    redis_client.sdiffstore(KEY_UNFINISHED_TASKS, KEY_UNFINISHED_TASKS, KEY_FINISHED_TASKS)
 
 
 def set_program_exit(status):
@@ -103,6 +143,16 @@ def wait_finish():
 
 def add_task(task: Task):
     with tasks_rw_lock:
+        if not program_exit:
+            if run_mode == RunMode.MODE_SPREAD_FRIEND:
+                if task.type != TaskType.TASK_GET_FRIEND_LIST:
+                    return
+            elif run_mode == RunMode.MODE_FILLIN_USERINFO:
+                if task.type != TaskType.TASK_GET_PLAYER_SUMMARIES and task.type != TaskType.TASK_GET_OWNED_GAMES and task.type != TaskType.TASK_GET_RECENTLY_PLAYED_GAMES:
+                    return
+            elif run_mode == RunMode.MODE_FILLIN_GAMEINFO:
+                if task.type != TaskType.TASK_GET_APP_DETAILS:
+                    return
         redis_client.sadd(KEY_UNFINISHED_TASKS, pickle.dumps(task))
         executor.submit(runner, task)
 
