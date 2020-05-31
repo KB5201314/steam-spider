@@ -1,3 +1,10 @@
 config.json
-.idea/**
-__pycache__/**
+.idea/
+__pycache__/
+env/
+build/
+extra/steam_user_net
+extra/*.zip
+out/
+steam_spider/
+*.c

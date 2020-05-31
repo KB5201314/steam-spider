@@ -30,7 +30,7 @@ mongodump -d steam_user_net -o './extra/'
 
 - restoredata
 ```shell script
-mongorestore --numParallelCollections 1 -d steam_user_net --drop ./extra/steam_user_net
+mongorestore -u 'steam_user' -p '#@!steam_user_passwd^&*' --numParallelCollections 1 -d steam_user_net --drop ./extra/steam_user_net
 ```
 
 

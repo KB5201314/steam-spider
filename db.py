@@ -42,20 +42,20 @@ def find_all_steamid():
 
 
 def find_all_friend_list():
-    return steamdb['friend_list'].find()
+    return list(steamdb['friend_list'].find())
 
 
 def find_all_player_summaries():
-    return steamdb['player_summaries'].find()
+    return list(steamdb['player_summaries'].find())
 
 
 def find_all_owned_games():
-    return steamdb['owned_games'].find()
+    return list(steamdb['owned_games'].find())
 
 
 def find_all_recently_played_games():
-    return steamdb['recently_played_games'].find()
+    return list(steamdb['recently_played_games'].find())
 
 
 def find_all_app_details():
-    return steamdb['app_details'].find()
+    return list(steamdb['app_details'].find())

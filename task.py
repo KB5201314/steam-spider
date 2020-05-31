@@ -126,7 +126,8 @@ def load_unfinished_tasks_fromdb():
         all_owned_games = db.find_all_owned_games()
         for owned_games in all_owned_games:
             if 'games' in owned_games:
-                tasks.update([pickle.dumps(Task(TaskType.TASK_GET_APP_DETAILS, {'appid': game['appid']})) for game in owned_games['games']])
+                tasks.update([pickle.dumps(Task(TaskType.TASK_GET_APP_DETAILS, {'appid': game['appid']})) for game in
+                              owned_games['games']])
 
     redis_client.sadd(KEY_UNFINISHED_TASKS, *tasks)
     redis_client.sdiffstore(KEY_UNFINISHED_TASKS, KEY_UNFINISHED_TASKS, KEY_FINISHED_TASKS)
