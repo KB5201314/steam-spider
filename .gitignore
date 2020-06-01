@@ -4,7 +4,8 @@ __pycache__/
 env/
 build/
 extra/steam_user_net
-extra/*.zip
+extra/**.zip
 out/
 steam_spider/
 *.c
+extra/**.dump
