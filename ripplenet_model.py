@@ -71,7 +71,7 @@ class RippleNet(object):
         o_list = self._key_addressing()
 
         self.scores = tf.squeeze(self.predict(self.item_embeddings, o_list))
-        self.scores_normalized = tf.sigmoid(self.scores)
+        self.scores_normalized = tf.sigmoid(self.scores, name='scores_normalized')
 
     def _key_addressing(self):
         o_list = []

@@ -21,11 +21,11 @@ def load_kg_from_neo4j(args):
     # try to read from cache
     kg_file = './out/load_kg_from_neo4j_result.pickle'
     if os.path.exists(kg_file):
-        return pickle.load(open(kg_file, 'rb'))
+        return pickle.load(open(kg_file, 'rb'))[:-1]
     else:
         result = load_kg_from_neo4j_internal(args)
         pickle.dump(result, open(kg_file, 'wb'))
-        return result
+        return result[:-1]
 
 
 def load_kg_from_neo4j_internal(args):
@@ -39,7 +39,8 @@ def load_kg_from_neo4j_internal(args):
     # calculate train_data, eval_data, test_data, player_to_games
     print('[info] setp 1')
     owneds = graph.relationships.match(r_type='Owned')
-    owned_np = np.array([[user_to_ind[r.start_node.identity], notuser_to_ind[r.end_node.identity], 1] for r in owneds])
+    owned_np = np.array([[user_to_ind[r.start_node['steamid']], notuser_to_ind[r.end_node['appid']], 1] for r in owneds])
+    n_games = len(notuser_to_ind)
     owned_np_pairs = set([(owned_np[own][0], owned_np[own][1]) for own in range(owned_np.shape[0])])
     users = list(set(owned_np[:, 0]))
     games = list(set(owned_np[:, 1]))
@@ -61,18 +62,32 @@ def load_kg_from_neo4j_internal(args):
     # calculate n_entity, n_relation, kg_dic
     print('[info] setp 2')
     kg_np = np.empty((0, 3))
-    relations = graph.relationships.match(r_type='Developed By')
+    relations = list(graph.relationships.match(r_type='Developed By'))
     kg_np = np.vstack((kg_np, np.array(
-        [[notuser_to_ind[r.start_node.identity], relation_type_to_ind['Developed By'],
-          notuser_to_ind[r.end_node.identity]] for r in relations])))
-    relations = graph.relationships.match(r_type='Published By')
+        [[notuser_to_ind[r.start_node['appid']], relation_type_to_ind['Developed By'],
+          notuser_to_ind[r.end_node['name']]] for r in relations])))
     kg_np = np.vstack((kg_np, np.array(
-        [[notuser_to_ind[r.start_node.identity], relation_type_to_ind['Published By'],
-          notuser_to_ind[r.end_node.identity]] for r in relations])))
-    relations = graph.relationships.match(r_type='Marked As')
+        [[notuser_to_ind[r.end_node['name']], relation_type_to_ind['Develop'],
+          notuser_to_ind[r.start_node['appid']]] for r in relations])))
+    relations = list(graph.relationships.match(r_type='Published By'))
     kg_np = np.vstack((kg_np, np.array(
-        [[notuser_to_ind[r.start_node.identity], relation_type_to_ind['Marked As'], notuser_to_ind[r.end_node.identity]]
+        [[notuser_to_ind[r.start_node['appid']], relation_type_to_ind['Published By'],
+          notuser_to_ind[r.end_node['name']]] for r in relations])))
+    kg_np = np.vstack((kg_np, np.array(
+        [[notuser_to_ind[r.end_node['name']], relation_type_to_ind['Publish'],
+          notuser_to_ind[r.start_node['appid']]] for r in relations])))
+    relations = list(graph.relationships.match(r_type='Marked As'))
+    kg_np = np.vstack((kg_np, np.array(
+        [[notuser_to_ind[r.start_node['appid']], relation_type_to_ind['Marked As'], notuser_to_ind[r.end_node['value']]]
          for r in relations])))
+    kg_np = np.vstack((kg_np, np.array(
+        [[notuser_to_ind[r.end_node['value']], relation_type_to_ind['Mark'], notuser_to_ind[r.start_node['appid']]]
+         for r in relations])))
+    game_have_out = set(kg_np[:, 0])
+    # add self loop to those games which has no out relations
+    kg_np = np.vstack((kg_np, np.array(
+        [[game_ind, relation_type_to_ind['SelfLoop'], game_ind] for game_ind in (set(games) - game_have_out)])))
+
     # n_entity = len(set(kg_np[:, 0]) | set(kg_np[:, 2]))
     n_entity = len(notuser_to_ind)
     n_relation = len(set(kg_np[:, 1]))
@@ -82,7 +97,7 @@ def load_kg_from_neo4j_internal(args):
     print('[info] setp 3')
     ripple_set = get_ripple_set(kg_dic, player_to_games, args.n_hop, args.n_memory)
 
-    return train_data, eval_data, test_data, n_entity, n_relation, ripple_set
+    return train_data, eval_data, test_data, n_entity, n_relation, ripple_set, (n_games, dict(relation_type_to_ind), dict(user_to_ind), dict(notuser_to_ind))
 
 
 def dataset_split(rating_np):

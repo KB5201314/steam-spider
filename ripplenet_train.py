@@ -1,6 +1,9 @@
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
+
 from ripplenet_model import RippleNet
+
+model_save_path = './out/ripplenet_model'
 
 
 def train(args, data_info, show_loss):
@@ -37,6 +40,8 @@ def train(args, data_info, show_loss):
 
             print('epoch %d    train auc: %.4f  acc: %.4f    eval auc: %.4f  acc: %.4f    test auc: %.4f  acc: %.4f'
                   % (step, train_auc, train_acc, eval_auc, eval_acc, test_auc, test_acc))
+        saver = tf.train.Saver()
+        saver.save(sess, model_save_path)
 
 
 def get_feed_dict(args, model, data, ripple_set, start, end):

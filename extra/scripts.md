@@ -45,3 +45,8 @@ use steam_user_net
 db.auth('steam_user', "#@!steam_user_passwd^&*")
 
 ```
+
+- neo4j dump
+```shell script
+neo4j-admin dump --to=./extra/neo4j_kg.dump
+```

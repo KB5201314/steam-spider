@@ -1,5 +1,6 @@
 import db
 import py2neo
+from py2neo.cypher import cypher_escape
 
 # read data
 db.init()
@@ -66,39 +67,41 @@ def insert_node():
     genres -= {''}
     for r in genres:
         n = py2neo.Node('Genre')
-        n['name'] = r
+        n['value'] = r
         graph.create(n)
 
 
 def insert_relation():
-    matcher = py2neo.NodeMatcher(graph)
     # Owns
+    cypher = '''
+        MATCH (a:Player{{steamid:'{}'}}),(b:Game{{appid:{}}})
+        CREATE r=(a)-[:Owned]->(b)
+    '''
     for owned_games in all_owned_games:
-        user_node = py2neo.Node('Player', steamid=owned_games['_id'])
-        graph.merge(user_node, 'Player', 'steamid')
         if 'games' in owned_games:
             for g in owned_games['games']:
-                game_node = py2neo.Node('Game', appid=g['appid'])
-                graph.merge(game_node, 'Game', 'appid')
-                relation = py2neo.Relationship(user_node, 'Owned', game_node)
-                graph.create(relation)
+                graph.run(cypher.format(owned_games['_id'], g['appid']))
     # Games links
+    dev_cypher = '''
+        MATCH (a:Game{appid:$appid}),(b:Developer{name: $name})
+        CREATE r=(a)-[:`Developed By`]->(b)
+    '''
+    pub_cypher = '''
+        MATCH (a:Game{appid:$appid}),(b:Publisher{name: $name})
+        CREATE r=(a)-[:`Published By`]->(b)
+    '''
+    marked_cypher = '''
+        MATCH (a:Game{appid:$appid}),(b:Genre{value: $value})
+        CREATE r=(a)-[:`Marked As`]->(b)
+    '''
     for game in all_app_details:
         if 'data' in game:
-            game_node = py2neo.Node('Game', appid=game['_id'])
-            graph.merge(game_node, 'Game', 'appid')
             if 'developers' in game['data']:
                 for dev_name in game['data']['developers']:
-                    dev_node = py2neo.Node('Developer', name=dev_name)
-                    graph.merge(dev_node, 'Developer', 'name')
-                    graph.create(py2neo.Relationship(game_node, 'Developed By', dev_node))
+                    graph.run(dev_cypher, appid=game['_id'], name=dev_name)
             if 'publishers' in game['data']:
                 for pub_name in game['data']['publishers']:
-                    pub_node = py2neo.Node('Publisher', name=pub_name)
-                    graph.merge(pub_node, 'Publisher', 'name')
-                    graph.create(py2neo.Relationship(game_node, 'Published By', pub_node))
+                    graph.run(pub_cypher, appid=game['_id'], name=pub_name)
             if 'genres' in game['data']:
                 for genre in game['data']['genres']:
-                    genre_node = py2neo.Node('Genre', value=genre['description'])
-                    graph.merge(genre_node, 'Genre', 'value')
-                    graph.create(py2neo.Relationship(game_node, 'Marked As', genre_node))
+                    graph.run(marked_cypher, appid=game['_id'], value=genre['description'])

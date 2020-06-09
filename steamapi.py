@@ -28,8 +28,7 @@ def get_player_summaries(steamid):
 def get_owned_games(steamid):
     resp = steam_client.api_call(
         'GET', 'IPlayerService', 'GetOwnedGames', 'v1',
-        {'key': api_key, 'steamid': steamid, 'include_appinfo': 1, 'include_played_free_games': 1,
-         'include_free_sub': 1}).json()
+        {'key': api_key, 'steamid': steamid, 'include_appinfo': 1, 'include_played_free_games': 1}).json()
     return resp['response']
 
 
