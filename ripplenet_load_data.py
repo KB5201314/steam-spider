@@ -5,7 +5,10 @@ import random
 
 import numpy as np
 import py2neo
+import db
 
+
+KG_CONTAINS_USER = False
 
 def get_incer():
     x = [-1]
@@ -62,6 +65,31 @@ def load_kg_from_neo4j_internal(args):
     # calculate n_entity, n_relation, kg_dic
     print('[info] setp 2')
     kg_np = np.empty((0, 3))
+
+    if KG_CONTAINS_USER:
+        db.init()
+        steamids = set(db.find_all_steamid())
+        friend_lists = db.find_all_friend_list()
+        friend_relations = set()
+        for friend_list in friend_lists:
+            u = friend_list['_id']
+            for friend in friend_list['friends']:
+                v = friend['steamid']
+                if v in steamids:
+                    friend_relations.add((u, v))
+        
+        kg_np = np.vstack((kg_np, np.array(
+            [[notuser_to_ind[r[0]], relation_type_to_ind['Friend With'], notuser_to_ind[r[1]]] for r in friend_relations])))
+
+        relations = list(graph.relationships.match(r_type='Owned'))
+        kg_np = np.vstack((kg_np, np.array(
+            [[notuser_to_ind[r.start_node['steamid']], relation_type_to_ind['Owned'],
+            notuser_to_ind[r.end_node['appid']]] for r in relations])))
+        kg_np = np.vstack((kg_np, np.array(
+            [[notuser_to_ind[r.end_node['appid']], relation_type_to_ind['Owned By'],
+            notuser_to_ind[r.start_node['steamid']]] for r in relations])))
+
+
     relations = list(graph.relationships.match(r_type='Developed By'))
     kg_np = np.vstack((kg_np, np.array(
         [[notuser_to_ind[r.start_node['appid']], relation_type_to_ind['Developed By'],
@@ -84,9 +112,10 @@ def load_kg_from_neo4j_internal(args):
         [[notuser_to_ind[r.end_node['value']], relation_type_to_ind['Mark'], notuser_to_ind[r.start_node['appid']]]
          for r in relations])))
     game_have_out = set(kg_np[:, 0])
-    # add self loop to those games which has no out relations
-    kg_np = np.vstack((kg_np, np.array(
-        [[game_ind, relation_type_to_ind['SelfLoop'], game_ind] for game_ind in (set(games) - game_have_out)])))
+    if not KG_CONTAINS_USER:
+        # add self loop to those games which has no out relations
+        kg_np = np.vstack((kg_np, np.array(
+            [[game_ind, relation_type_to_ind['SelfLoop'], game_ind] for game_ind in (set(games) - game_have_out)])))
 
     # n_entity = len(set(kg_np[:, 0]) | set(kg_np[:, 2]))
     n_entity = len(notuser_to_ind)
